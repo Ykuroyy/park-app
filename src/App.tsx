@@ -111,6 +111,8 @@ function App() {
     }
 
     try {
+      // UTF-8 BOMを追加して文字化けを防ぐ
+      const BOM = '\uFEFF';
       const csvContent = [
         'ID,車番,入場時刻,退場時刻,滞在時間(分)',
         ...parkingRecords.map(r =>
@@ -122,7 +124,7 @@ function App() {
 
       console.log('CSVコンテンツ:', csvContent);
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       
@@ -142,11 +144,70 @@ function App() {
       console.log('CSV出力完了');
       
       // 成功メッセージ（スマホ向けに詳細に）
-      alert('CSVファイルのダウンロードを開始しました。\n\n📱 確認方法:\n• iPhone: ファイルアプリ → ダウンロード\n• Android: ファイルマネージャー → Download\n\n📊 開き方:\n• Googleスプレッドシート\n• Excel\n• Numbers (iOS)');
+      alert('CSVファイルのダウンロードを開始しました。\n\n📱 確認方法:\n• iPhone: ファイルアプリ → ダウンロード\n• Android: ファイルマネージャー → Download\n\n📊 開き方:\n• CSVファイルをタップ → 共有 → Googleスプレッドシート\n• または Numbers/Excel で開く\n\n✅ UTF-8 BOM付きで文字化けを防止済み');
       
     } catch (error) {
       console.error('CSV出力エラー:', error);
       alert('CSVファイルの出力中にエラーが発生しました。');
+    }
+  };
+
+  const exportToGoogleSheets = () => {
+    console.log('Googleスプレッドシート出力開始');
+    
+    if (parkingRecords.length === 0) {
+      alert('出力するデータがありません。まず車両を登録してください。');
+      return;
+    }
+
+    try {
+      // TSV形式（タブ区切り）でデータを作成
+      const tsvContent = [
+        'ID\t車番\t入場時刻\t退場時刻\t滞在時間(分)',
+        ...parkingRecords.map(r =>
+          `${r.id}\t${r.plateNumber}\t${new Date(r.entryDate).toLocaleString('ja-JP')}\t${
+            r.exitDate ? new Date(r.exitDate).toLocaleString('ja-JP') : '駐車中'
+          }\t${r.duration || '計算中'}`
+        )
+      ].join('\n');
+
+      console.log('TSVコンテンツ:', tsvContent);
+
+      // クリップボードにコピー
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(tsvContent).then(() => {
+          alert('データをクリップボードにコピーしました！\n\n📊 使い方:\n1. Googleスプレッドシートアプリを開く\n2. 新しいシートを作成\n3. セルA1をタップして貼り付け\n4. データが表形式で自動整理されます');
+        }).catch(() => {
+          // フォールバック: 手動コピー用のテキストエリアを表示
+          showCopyDialog(tsvContent);
+        });
+      } else {
+        // クリップボードAPIが使えない場合
+        showCopyDialog(tsvContent);
+      }
+      
+    } catch (error) {
+      console.error('Googleスプレッドシート出力エラー:', error);
+      alert('データの出力中にエラーが発生しました。');
+    }
+  };
+
+  const showCopyDialog = (content: string) => {
+    const textarea = document.createElement('textarea');
+    textarea.value = content;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    
+    try {
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      alert('データをクリップボードにコピーしました！\n\n📊 使い方:\n1. Googleスプレッドシートアプリを開く\n2. 新しいシートを作成\n3. セルA1をタップして貼り付け\n4. データが表形式で自動整理されます');
+    } catch (err) {
+      document.body.removeChild(textarea);
+      alert('コピーに失敗しました。手動でCSV出力をご利用ください。');
     }
   };
 
@@ -223,6 +284,9 @@ function App() {
         <div className="header-buttons">
           <button onClick={() => setShowGuide(true)} className="guide-button">
             ❓ 使い方
+          </button>
+          <button onClick={exportToGoogleSheets} className="sheets-button">
+            📊 スプレッドシート
           </button>
           <button onClick={exportToCSV} className="export-button">
             📥 CSV出力

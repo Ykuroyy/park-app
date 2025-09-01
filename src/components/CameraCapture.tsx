@@ -81,19 +81,41 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       return;
     }
 
-    // キャンバスのサイズをビデオに合わせる
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    // キャンバスのサイズをビデオに合わせる（高解像度で処理）
+    const scale = 2; // 解像度を2倍に
+    canvas.width = (video.videoWidth || 640) * scale;
+    canvas.height = (video.videoHeight || 480) * scale;
 
     console.log('キャンバスサイズ:', canvas.width, 'x', canvas.height);
 
-    // ビデオフレームをキャンバスに描画
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // ビデオフレームをキャンバスに描画（高解像度）
+    ctx.scale(scale, scale);
+    ctx.drawImage(video, 0, 0, canvas.width / scale, canvas.height / scale);
+    
+    // 画像の前処理でコントラストを向上
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    
+    // コントラストとシャープネスを向上
+    for (let i = 0; i < data.length; i += 4) {
+      // グレースケール変換
+      const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+      
+      // コントラスト強化
+      const enhanced = ((gray - 128) * 1.5) + 128;
+      const final = Math.max(0, Math.min(255, enhanced));
+      
+      data[i] = final;     // R
+      data[i + 1] = final; // G  
+      data[i + 2] = final; // B
+    }
+    
+    ctx.putImageData(imageData, 0, 0);
 
     // 撮影した画像を保存して画面を静止
-    const imageData = canvas.toDataURL('image/jpeg', 0.8);
-    setCapturedImage(imageData);
-    console.log('撮影した画像データ:', imageData.substring(0, 100) + '...');
+    const capturedImageData = canvas.toDataURL('image/jpeg', 0.8);
+    setCapturedImage(capturedImageData);
+    console.log('撮影した画像データ:', capturedImageData.substring(0, 100) + '...');
 
     try {
       // Tesseract.jsでOCR実行
@@ -109,7 +131,10 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
         },
         // OCRの精度を向上させるオプション
         oem: '1', // LSTM OCRエンジンを使用
-        psm: '6', // 単一のブロックテキストとして処理
+        psm: '8', // 単語として処理（ナンバープレート用に最適化）
+        // 追加の精度向上設定
+        preserve_interword_spaces: '1',
+        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん品川新宿渋谷世田谷練馬板橋足立葛飾江戸川台東墨田荒川北豊島中野杉並目黒大田港千代田中央文京江東横浜川崎相模厚木藤沢茅ヶ崎平塚小田原',
       });
 
       console.log('OCR完了:', result);
@@ -118,8 +143,8 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       console.log('信頼度:', result.data.confidence);
 
       // 空または低信頼度の場合の処理
-      if (!detectedText || result.data.confidence < 30) {
-        setError(`テキストが検出されませんでした。(信頼度: ${Math.round(result.data.confidence)}%)\n明るい場所でナンバープレートを明確に撮影してください。`);
+      if (!detectedText || result.data.confidence < 25) {
+        setError(`テキストが検出されませんでした。(信頼度: ${Math.round(result.data.confidence)}%)\n明るい場所でナンバープレートを明確に撮影してください。\n\n💡 コツ:\n・プレートが水平になるように\n・文字がはっきり見えるまで近づく\n・影がかからないように`);
         setIsProcessing(false);
         return;
       }
