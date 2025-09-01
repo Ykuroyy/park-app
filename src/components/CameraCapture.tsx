@@ -22,6 +22,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string>('');
   const [showSuccess, setShowSuccess] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
   React.useEffect(() => {
     startCamera();
@@ -89,8 +90,9 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
     // ビデオフレームをキャンバスに描画
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // デバッグ用: 撮影した画像をダウンロードできるようにする
+    // 撮影した画像を保存して画面を静止
     const imageData = canvas.toDataURL('image/jpeg', 0.8);
+    setCapturedImage(imageData);
     console.log('撮影した画像データ:', imageData.substring(0, 100) + '...');
 
     try {
@@ -236,22 +238,32 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       </div>
 
       <div className="camera-container">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="camera-video"
-        />
-        
-        <div className="scan-frame">
-          <div className="scan-corners">
-            <div className="corner top-left"></div>
-            <div className="corner top-right"></div>
-            <div className="corner bottom-left"></div>
-            <div className="corner bottom-right"></div>
-          </div>
-        </div>
+        {!capturedImage ? (
+          <>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="camera-video"
+            />
+            
+            <div className="scan-frame">
+              <div className="scan-corners">
+                <div className="corner top-left"></div>
+                <div className="corner top-right"></div>
+                <div className="corner bottom-left"></div>
+                <div className="corner bottom-right"></div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <img
+            src={capturedImage}
+            alt="撮影した画像"
+            className="captured-image"
+          />
+        )}
 
         <canvas
           ref={canvasRef}
@@ -262,10 +274,15 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       <div className="camera-controls">
         <button
           className="capture-button"
-          onClick={captureImage}
+          onClick={capturedImage ? () => {
+            setCapturedImage(null);
+            setError('');
+            setShowSuccess(false);
+          } : captureImage}
           disabled={isProcessing}
         >
-          {isProcessing ? '解析中...' : '📷 撮影して読み取り'}
+          {isProcessing ? '解析中...' : 
+           capturedImage ? '🔄 再撮影' : '📷 スキャンする'}
         </button>
         
         <button
