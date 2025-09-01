@@ -23,9 +23,36 @@ function App() {
   }, []);
 
   const loadParkingRecords = () => {
-    const stored = localStorage.getItem('parkingRecords');
-    if (stored) {
-      setParkingRecords(JSON.parse(stored));
+    try {
+      const stored = localStorage.getItem('parkingRecords');
+      if (stored) {
+        const records = JSON.parse(stored);
+        setParkingRecords(records);
+        console.log('読み込まれた駐車記録:', records.length, '件');
+      } else {
+        console.log('保存された駐車記録がありません');
+        // テスト用のサンプルデータを追加（初回のみ）
+        const sampleData = [
+          {
+            id: '1',
+            plateNumber: '品川 500 あ 12-34',
+            entryDate: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2時間前
+            exitDate: new Date(Date.now() - 30 * 60 * 1000).toISOString(), // 30分前
+            duration: 90 // 90分
+          },
+          {
+            id: '2', 
+            plateNumber: '横浜 300 か 56-78',
+            entryDate: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(), // 1時間前
+            // 現在駐車中（exitDate なし）
+          }
+        ];
+        setParkingRecords(sampleData);
+        localStorage.setItem('parkingRecords', JSON.stringify(sampleData));
+        console.log('サンプルデータを作成しました');
+      }
+    } catch (error) {
+      console.error('データ読み込みエラー:', error);
     }
   };
 
@@ -73,24 +100,52 @@ function App() {
   };
 
   const exportToCSV = () => {
-    const csvContent = [
-      'ID,車番,入場時刻,退場時刻,滞在時間(分)',
-      ...parkingRecords.map(r =>
-        `${r.id},${r.plateNumber},${new Date(r.entryDate).toLocaleString('ja-JP')},${
-          r.exitDate ? new Date(r.exitDate).toLocaleString('ja-JP') : '駐車中'
-        },${r.duration || '計算中'}`
-      )
-    ].join('\n');
+    console.log('CSV出力開始');
+    console.log('駐車記録数:', parkingRecords.length);
+    
+    if (parkingRecords.length === 0) {
+      alert('出力するデータがありません。まず車両を登録してください。');
+      return;
+    }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'parking_records.csv');
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const csvContent = [
+        'ID,車番,入場時刻,退場時刻,滞在時間(分)',
+        ...parkingRecords.map(r =>
+          `${r.id},"${r.plateNumber}","${new Date(r.entryDate).toLocaleString('ja-JP')}","${
+            r.exitDate ? new Date(r.exitDate).toLocaleString('ja-JP') : '駐車中'
+          }","${r.duration || '計算中'}"`
+        )
+      ].join('\n');
+
+      console.log('CSVコンテンツ:', csvContent);
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.href = url;
+      link.download = `parking_records_${new Date().toISOString().split('T')[0]}.csv`;
+      
+      // クリック処理を確実に実行
+      document.body.appendChild(link);
+      link.click();
+      
+      // クリーンアップ
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
+
+      console.log('CSV出力完了');
+      
+      // 成功メッセージ
+      alert('CSVファイルのダウンロードを開始しました。');
+      
+    } catch (error) {
+      console.error('CSV出力エラー:', error);
+      alert('CSVファイルの出力中にエラーが発生しました。');
+    }
   };
 
   const getAnalytics = () => {

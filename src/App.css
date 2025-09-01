@@ -19,17 +19,29 @@
 }
 
 .export-button {
-  background-color: rgba(255,255,255,0.2);
-  border: 1px solid rgba(255,255,255,0.3);
+  background-color: #4CAF50;
+  border: 1px solid #45a049;
   color: white;
   padding: 10px 15px;
-  border-radius: 5px;
+  border-radius: 20px;
   cursor: pointer;
   font-size: 14px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
 .export-button:hover {
-  background-color: rgba(255,255,255,0.3);
+  background-color: #45a049;
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.export-button:active {
+  transform: scale(0.95);
 }
 
 .tab-container {
