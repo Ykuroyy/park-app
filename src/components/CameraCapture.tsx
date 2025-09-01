@@ -81,29 +81,43 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       return;
     }
 
-    // キャンバスのサイズをビデオに合わせる（高解像度で処理）
-    const scale = 2; // 解像度を2倍に
+    // キャンバスのサイズをビデオに合わせる（超高解像度で処理）
+    const scale = 3; // 解像度を3倍に増加
     canvas.width = (video.videoWidth || 640) * scale;
     canvas.height = (video.videoHeight || 480) * scale;
 
     console.log('キャンバスサイズ:', canvas.width, 'x', canvas.height);
 
-    // ビデオフレームをキャンバスに描画（高解像度）
+    // 高品質な描画設定
+    ctx.imageSmoothingEnabled = false; // ピクセル補間を無効にしてシャープに
     ctx.scale(scale, scale);
     ctx.drawImage(video, 0, 0, canvas.width / scale, canvas.height / scale);
     
-    // 画像の前処理でコントラストを向上
+    // より積極的な画像前処理
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     
-    // コントラストとシャープネスを向上
+    // 二値化とコントラスト強化
     for (let i = 0; i < data.length; i += 4) {
-      // グレースケール変換
+      // RGB to グレースケール
       const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
       
-      // コントラスト強化
-      const enhanced = ((gray - 128) * 1.5) + 128;
-      const final = Math.max(0, Math.min(255, enhanced));
+      // 強力なコントラスト強化（2.0倍に増加）
+      const contrast = 2.0;
+      const enhanced = ((gray - 128) * contrast) + 128;
+      
+      // 二値化に近い処理（閾値120）
+      const threshold = 120;
+      let final;
+      if (enhanced > threshold + 30) {
+        final = Math.min(255, enhanced * 1.2); // 白をより白く
+      } else if (enhanced < threshold - 30) {
+        final = Math.max(0, enhanced * 0.7);   // 黒をより黒く
+      } else {
+        final = enhanced > threshold ? 220 : 60; // 中間値を二値化
+      }
+      
+      final = Math.max(0, Math.min(255, final));
       
       data[i] = final;     // R
       data[i + 1] = final; // G  
@@ -120,31 +134,70 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
     try {
       // Tesseract.jsでOCR実行
       console.log('OCR開始...');
-      const result = await Tesseract.recognize(canvas, 'jpn+eng', {
-        logger: (m) => {
-          console.log('OCR進行状況:', m);
-          if (m.status === 'recognizing text') {
-            // 進行状況を表示
-            const progress = Math.round(m.progress * 100);
-            console.log(`認識中: ${progress}%`);
-          }
-        },
-        // OCRの精度を向上させるオプション
-        oem: '1', // LSTM OCRエンジンを使用
-        psm: '8', // 単語として処理（ナンバープレート用に最適化）
-        // 追加の精度向上設定
-        preserve_interword_spaces: '1',
-        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん品川新宿渋谷世田谷練馬板橋足立葛飾江戸川台東墨田荒川北豊島中野杉並目黒大田港千代田中央文京江東横浜川崎相模厚木藤沢茅ヶ崎平塚小田原',
-      });
+      // 複数のPSMモードで試行して最適な結果を選択
+      const psmModes = [8, 7, 13, 6]; // 最適な順で試行
+      let bestResult = null;
+      let bestConfidence = 0;
 
-      console.log('OCR完了:', result);
+      for (const psm of psmModes) {
+        console.log(`PSMモード ${psm} で試行中...`);
+        
+        try {
+          const result = await Tesseract.recognize(canvas, 'jpn+eng', {
+            logger: (m) => {
+              if (m.status === 'recognizing text') {
+                const progress = Math.round(m.progress * 100);
+                console.log(`PSM${psm} 認識中: ${progress}%`);
+              }
+            },
+            // 最適化されたOCR設定
+            oem: '1', // LSTM OCRエンジン
+            psm: psm.toString(),
+            // ナンバープレート特化設定
+            preserve_interword_spaces: '1',
+            tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん品川新宿渋谷世田谷練馬板橋足立葛飾江戸川台東墨田荒川北豊島中野杉並目黒大田港千代田中央文京江東横浜川崎相模厚木藤沢茅ヶ崎平塚小田原',
+            tessedit_pageseg_mode: psm.toString(),
+            // 追加の最適化
+            tessedit_char_blacklist: '!@#$%^&*()_+{}|:<>?[];\'",./\\`~',
+            load_system_dawg: '0',
+            load_freq_dawg: '0',
+          });
+
+          console.log(`PSM${psm} 結果:`, result.data.text.trim(), `信頼度: ${result.data.confidence}`);
+
+          if (result.data.confidence > bestConfidence && result.data.text.trim()) {
+            bestResult = result;
+            bestConfidence = result.data.confidence;
+          }
+
+          // 高信頼度の結果が得られたら早期終了
+          if (result.data.confidence > 70) {
+            console.log(`高信頼度結果を取得、PSM${psm}で終了`);
+            bestResult = result;
+            break;
+          }
+        } catch (error) {
+          console.error(`PSM${psm}でエラー:`, error);
+          continue;
+        }
+      }
+
+      const result = bestResult;
+
+      if (!result) {
+        setError('テキスト認識に失敗しました。\n\n💡 改善方法:\n・より明るい場所で撮影\n・プレートに近づく\n・プレートが水平になるように\n・手ブレしないようにしっかり持つ');
+        setIsProcessing(false);
+        return;
+      }
+
+      console.log('最終OCR結果:', result);
       const detectedText = result.data.text.trim();
       console.log('検出されたテキスト:', detectedText);
-      console.log('信頼度:', result.data.confidence);
+      console.log('最終信頼度:', result.data.confidence);
 
-      // 空または低信頼度の場合の処理
-      if (!detectedText || result.data.confidence < 25) {
-        setError(`テキストが検出されませんでした。(信頼度: ${Math.round(result.data.confidence)}%)\n明るい場所でナンバープレートを明確に撮影してください。\n\n💡 コツ:\n・プレートが水平になるように\n・文字がはっきり見えるまで近づく\n・影がかからないように`);
+      // より寛容な閾値に変更
+      if (!detectedText || result.data.confidence < 15) {
+        setError(`テキストが検出されませんでした。(信頼度: ${Math.round(result.data.confidence)}%)\n\n🔄 複数のモードで試行済み\n\n💡 コツ:\n・プレートが水平になるように\n・文字がはっきり見えるまで近づく\n・影がかからないように\n・手動入力もご利用ください`);
         setIsProcessing(false);
         return;
       }
@@ -173,12 +226,20 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
   const parseJapanesePlate = (text: string): PlateInfo | null => {
     console.log('原文:', text);
     
-    // テキストのクリーンアップをより柔軟に
+    // より積極的なテキストクリーンアップ
     let cleanText = text
       .replace(/\r?\n/g, ' ') // 改行をスペースに
       .replace(/\s+/g, ' ') // 複数のスペースを1つに
       .replace(/[^\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\-\s０-９]/g, '') // 不要な文字を削除
       .replace(/[０-９]/g, (match) => String.fromCharCode(match.charCodeAt(0) - 0xFF10 + 0x30)) // 全角数字を半角に
+      .replace(/[Ａ-Ｚａ-ｚ]/g, (match) => String.fromCharCode(match.charCodeAt(0) - 0xFF10 - 7)) // 全角英字を半角に
+      // よくある誤認識を修正
+      .replace(/[|Il1]/g, '1') // 縦線、I、l、1を統一
+      .replace(/[Oo0]/g, '0') // O、o、0を統一
+      .replace(/[Ss5]/g, '5') // S、s、5を統一
+      .replace(/[Zz2]/g, '2') // Z、z、2を統一
+      .replace(/[Bb8]/g, '8') // B、b、8を統一
+      .replace(/[Gg6]/g, '6') // G、g、6を統一
       .trim();
 
     console.log('クリーンアップ後:', cleanText);
