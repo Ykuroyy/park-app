@@ -115,7 +115,9 @@
 .camera-controls {
   padding: 20px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   background-color: rgba(0, 0, 0, 0.8);
 }
 
@@ -141,6 +143,21 @@
 .capture-button:disabled {
   background-color: #666;
   cursor: not-allowed;
+}
+
+.debug-button {
+  background-color: #FF9800;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.debug-button:hover {
+  background-color: #F57C00;
 }
 
 .error-message {
