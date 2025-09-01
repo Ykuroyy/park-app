@@ -1,11 +1,9 @@
 [build]
-  command = "npm install --legacy-peer-deps && NODE_ENV=production npx webpack --mode production"
-  publish = "web-build"
+  command = "npm install && npm run build"
+  publish = "dist"
 
 [build.environment]
-  NODE_VERSION = "20"
-  NPM_FLAGS = "--legacy-peer-deps"
-  NODE_ENV = "production"
+  NODE_VERSION = "18"
 
 [[redirects]]
   from = "/*"
