@@ -18,6 +18,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<ParkingRecord | null>(null);
 
   useEffect(() => {
     loadParkingRecords();
@@ -190,6 +191,31 @@ function App() {
     addParkingRecord(fullPlate);
   };
 
+  const deleteRecord = (recordId: string) => {
+    if (confirm('この記録を削除しますか？')) {
+      const updatedRecords = parkingRecords.filter(r => r.id !== recordId);
+      saveParkingRecords(updatedRecords);
+    }
+  };
+
+  const startEditRecord = (record: ParkingRecord) => {
+    setEditingRecord({...record});
+  };
+
+  const saveEditRecord = () => {
+    if (!editingRecord) return;
+    
+    const updatedRecords = parkingRecords.map(r => 
+      r.id === editingRecord.id ? editingRecord : r
+    );
+    saveParkingRecords(updatedRecords);
+    setEditingRecord(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingRecord(null);
+  };
+
   return (
     <div className="app">
       <div className="header">
@@ -260,7 +286,23 @@ function App() {
               <div key={record.id} className="record-item">
                 <div className="record-header">
                   <span className="plate-number">{record.plateNumber}</span>
-                  {!record.exitDate && <span className="parking-badge">駐車中</span>}
+                  <div className="record-actions">
+                    {!record.exitDate && <span className="parking-badge">駐車中</span>}
+                    <button
+                      className="edit-button"
+                      onClick={() => startEditRecord(record)}
+                      title="修正"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      className="delete-button"
+                      onClick={() => deleteRecord(record.id)}
+                      title="削除"
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
                 <p className="record-date">
                   入場: {new Date(record.entryDate).toLocaleString('ja-JP')}
@@ -383,6 +425,78 @@ function App() {
             >
               分かりました
             </button>
+          </div>
+        </div>
+      )}
+
+      {editingRecord && (
+        <div className="modal">
+          <div className="modal-content">
+            <h2>駐車記録の修正</h2>
+            
+            <div className="edit-form">
+              <label>
+                車番:
+                <input
+                  className="modal-input"
+                  value={editingRecord.plateNumber}
+                  onChange={(e) => setEditingRecord({
+                    ...editingRecord,
+                    plateNumber: e.target.value
+                  })}
+                />
+              </label>
+              
+              <label>
+                入場時刻:
+                <input
+                  className="modal-input"
+                  type="datetime-local"
+                  value={new Date(editingRecord.entryDate).toISOString().slice(0, 16)}
+                  onChange={(e) => setEditingRecord({
+                    ...editingRecord,
+                    entryDate: new Date(e.target.value).toISOString()
+                  })}
+                />
+              </label>
+              
+              {editingRecord.exitDate && (
+                <label>
+                  退場時刻:
+                  <input
+                    className="modal-input"
+                    type="datetime-local"
+                    value={new Date(editingRecord.exitDate).toISOString().slice(0, 16)}
+                    onChange={(e) => {
+                      const exitDate = new Date(e.target.value).toISOString();
+                      const duration = Math.floor(
+                        (new Date(exitDate).getTime() - new Date(editingRecord.entryDate).getTime()) / 1000 / 60
+                      );
+                      setEditingRecord({
+                        ...editingRecord,
+                        exitDate: exitDate,
+                        duration: duration
+                      });
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+
+            <div className="modal-buttons">
+              <button
+                className="modal-button cancel"
+                onClick={cancelEdit}
+              >
+                キャンセル
+              </button>
+              <button
+                className="modal-button confirm"
+                onClick={saveEditRecord}
+              >
+                保存
+              </button>
+            </div>
           </div>
         </div>
       )}

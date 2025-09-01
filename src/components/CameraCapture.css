@@ -8,6 +8,8 @@
   z-index: 1000;
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  height: 100dvh; /* モバイル対応 */
 }
 
 .camera-header {
@@ -51,6 +53,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 0; /* flexbox overflow対策 */
+  overflow: hidden;
 }
 
 .camera-video {
@@ -119,12 +123,14 @@
 }
 
 .camera-controls {
-  padding: 20px;
+  padding: 15px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  background-color: rgba(0, 0, 0, 0.8);
+  background-color: rgba(0, 0, 0, 0.9);
+  flex-shrink: 0; /* 縮小されないように */
+  min-height: 80px; /* 最小高さを確保 */
 }
 
 .capture-button {
@@ -244,8 +250,9 @@
 .instructions {
   background-color: rgba(0, 0, 0, 0.8);
   color: white;
-  padding: 15px 20px;
-  font-size: 14px;
+  padding: 10px 20px;
+  font-size: 12px;
+  flex-shrink: 0; /* 縮小されないように */
 }
 
 .instructions p {
@@ -269,17 +276,36 @@
     height: 140px;
   }
   
+  .camera-header {
+    padding: 10px 15px;
+  }
+  
   .camera-header h2 {
     font-size: 16px;
+  }
+  
+  .camera-controls {
+    padding: 12px 15px;
+    min-height: 70px;
   }
   
   .capture-button {
     padding: 12px 25px;
     font-size: 14px;
+    width: 100%;
+    max-width: 300px;
+  }
+  
+  .debug-button {
+    padding: 8px 15px;
+    font-size: 12px;
+    width: 100%;
+    max-width: 250px;
   }
   
   .instructions {
-    font-size: 13px;
+    font-size: 11px;
+    padding: 8px 15px;
   }
 }
 
@@ -289,10 +315,42 @@
   }
   
   .camera-header {
-    padding: 10px 20px;
+    padding: 8px 15px;
   }
   
   .camera-controls {
-    padding: 15px;
+    padding: 10px 15px;
+    min-height: 60px;
+  }
+  
+  .capture-button {
+    padding: 10px 20px;
+    font-size: 14px;
+  }
+}
+
+/* iPhone SE などの小さな画面 */
+@media (max-height: 700px) {
+  .camera-header {
+    padding: 8px 15px;
+  }
+  
+  .camera-header h2 {
+    font-size: 14px;
+  }
+  
+  .camera-controls {
+    padding: 10px 15px;
+    min-height: 60px;
+  }
+  
+  .capture-button {
+    padding: 10px 20px;
+    font-size: 13px;
+  }
+  
+  .instructions {
+    font-size: 10px;
+    padding: 6px 15px;
   }
 }

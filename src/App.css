@@ -187,6 +187,12 @@
   margin-bottom: 10px;
 }
 
+.record-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .plate-number {
   font-size: 18px;
   font-weight: bold;
@@ -347,6 +353,40 @@
 }
 
 .guide-section strong {
+  color: #333;
+}
+
+.edit-button,
+.delete-button {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 5px;
+  transition: background-color 0.2s;
+}
+
+.edit-button:hover {
+  background-color: rgba(33, 150, 243, 0.1);
+}
+
+.delete-button:hover {
+  background-color: rgba(244, 67, 54, 0.1);
+}
+
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.edit-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-weight: bold;
   color: #333;
 }
 
