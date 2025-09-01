@@ -21,6 +21,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
   const [isProcessing, setIsProcessing] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string>('');
+  const [showSuccess, setShowSuccess] = useState(false);
 
   React.useEffect(() => {
     startCamera();
@@ -125,8 +126,11 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       console.log('パース結果:', plateInfo);
 
       if (plateInfo && (plateInfo.region || plateInfo.number)) {
-        onPlateDetected(plateInfo);
-        onClose();
+        setShowSuccess(true);
+        setTimeout(() => {
+          onPlateDetected(plateInfo);
+          onClose();
+        }, 1500);
       } else {
         setError(`ナンバープレートとして認識できませんでした。\n検出テキスト: "${detectedText}"\n手動入力をお試しください。`);
       }
@@ -300,6 +304,15 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
           <div className="processing-content">
             <div className="spinner"></div>
             <p>ナンバープレートを解析中...</p>
+          </div>
+        </div>
+      )}
+
+      {showSuccess && (
+        <div className="success-overlay">
+          <div className="success-content">
+            <div className="success-icon">✅</div>
+            <p>スキャン成功！</p>
           </div>
         </div>
       )}

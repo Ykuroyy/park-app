@@ -139,8 +139,8 @@ function App() {
 
       console.log('CSV出力完了');
       
-      // 成功メッセージ
-      alert('CSVファイルのダウンロードを開始しました。');
+      // 成功メッセージ（スマホ向けに詳細に）
+      alert('CSVファイルのダウンロードを開始しました。\n\n📱 確認方法:\n• iPhone: ファイルアプリ → ダウンロード\n• Android: ファイルマネージャー → Download\n\n📊 開き方:\n• Googleスプレッドシート\n• Excel\n• Numbers (iOS)');
       
     } catch (error) {
       console.error('CSV出力エラー:', error);
