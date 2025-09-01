@@ -18,6 +18,12 @@
   font-size: 24px;
 }
 
+.header-buttons {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
 .export-button {
   background-color: #4CAF50;
   border: 1px solid #45a049;
@@ -41,6 +47,32 @@
 }
 
 .export-button:active {
+  transform: scale(0.95);
+}
+
+.guide-button {
+  background-color: #FF9800;
+  border: 1px solid #F57C00;
+  color: white;
+  padding: 10px 15px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.guide-button:hover {
+  background-color: #F57C00;
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.guide-button:active {
   transform: scale(0.95);
 }
 
@@ -277,6 +309,47 @@
   opacity: 0.9;
 }
 
+.guide-modal {
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.guide-section {
+  margin-bottom: 25px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.guide-section:last-of-type {
+  border-bottom: none;
+}
+
+.guide-section h3 {
+  margin: 0 0 15px 0;
+  color: #2196F3;
+  font-size: 16px;
+}
+
+.guide-section ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.guide-section ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.guide-section li {
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.guide-section strong {
+  color: #333;
+}
+
 /* レスポンシブ対応 */
 @media (max-width: 768px) {
   .header {
@@ -300,5 +373,18 @@
   .modal-content {
     margin: 20px;
     padding: 20px;
+  }
+  
+  .header-buttons {
+    gap: 5px;
+  }
+  
+  .guide-button {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  
+  .guide-modal {
+    max-height: 70vh;
   }
 }

@@ -17,6 +17,7 @@ function App() {
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCamera, setShowCamera] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     loadParkingRecords();
@@ -193,9 +194,14 @@ function App() {
     <div className="app">
       <div className="header">
         <h1>駐車場管理</h1>
-        <button onClick={exportToCSV} className="export-button">
-          📥 CSV出力
-        </button>
+        <div className="header-buttons">
+          <button onClick={() => setShowGuide(true)} className="guide-button">
+            ❓ 使い方
+          </button>
+          <button onClick={exportToCSV} className="export-button">
+            📥 CSV出力
+          </button>
+        </div>
       </div>
 
       <div className="tab-container">
@@ -336,6 +342,49 @@ function App() {
           onPlateDetected={handlePlateDetected}
           onClose={() => setShowCamera(false)}
         />
+      )}
+
+      {showGuide && (
+        <div className="modal">
+          <div className="modal-content guide-modal">
+            <h2>📋 駐車場管理アプリの使い方</h2>
+            
+            <div className="guide-section">
+              <h3>🚗 車両の入場・退場</h3>
+              <ol>
+                <li><strong>カメラスキャン:</strong> 「📷 カメラでスキャン」→ ナンバープレートを枠内に合わせ「スキャンする」ボタン</li>
+                <li><strong>手動入力:</strong> 「✏️ 手動入力」→ 車番を入力して登録</li>
+                <li><strong>自動判定:</strong> 同じ車番なら自動で入場/退場を判定</li>
+              </ol>
+            </div>
+
+            <div className="guide-section">
+              <h3>📊 データ管理</h3>
+              <ul>
+                <li><strong>履歴:</strong> 全ての入退場記録を検索・確認</li>
+                <li><strong>分析:</strong> 本日・今月の利用状況を表示</li>
+                <li><strong>CSV出力:</strong> データをExcelで確認可能</li>
+              </ul>
+            </div>
+
+            <div className="guide-section">
+              <h3>💡 カメラスキャンのコツ</h3>
+              <ul>
+                <li>明るい場所で撮影する</li>
+                <li>ナンバープレートを水平にする</li>
+                <li>文字がはっきり見えることを確認</li>
+                <li>枠内にプレート全体を収める</li>
+              </ul>
+            </div>
+
+            <button
+              className="modal-button confirm"
+              onClick={() => setShowGuide(false)}
+            >
+              分かりました
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
