@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import CameraCapture from './components/CameraCapture';
 import './App.css';
 
 interface ParkingRecord {
@@ -15,6 +16,7 @@ function App() {
   const [manualPlateNumber, setManualPlateNumber] = useState('');
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showCamera, setShowCamera] = useState(false);
 
   useEffect(() => {
     loadParkingRecords();
@@ -127,6 +129,11 @@ function App() {
 
   const analytics = getAnalytics();
 
+  const handlePlateDetected = (plateInfo: any) => {
+    const fullPlate = plateInfo.fullText || `${plateInfo.region} ${plateInfo.classification} ${plateInfo.hiragana} ${plateInfo.number}`.trim();
+    addParkingRecord(fullPlate);
+  };
+
   return (
     <div className="app">
       <div className="header">
@@ -161,9 +168,16 @@ function App() {
         <div className="scan-container">
           <button
             className="scan-button"
+            onClick={() => setShowCamera(true)}
+          >
+            📷 カメラでスキャン
+          </button>
+          
+          <button
+            className="manual-button"
             onClick={() => setShowManualEntry(true)}
           >
-            📷 ナンバープレート入力
+            ✏️ 手動入力
           </button>
           
           <div className="current-status">
@@ -260,6 +274,13 @@ function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {showCamera && (
+        <CameraCapture
+          onPlateDetected={handlePlateDetected}
+          onClose={() => setShowCamera(false)}
+        />
       )}
     </div>
   );

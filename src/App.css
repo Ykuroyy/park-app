@@ -60,7 +60,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 30px;
+  gap: 20px;
 }
 
 .scan-button {
@@ -76,6 +76,22 @@
 }
 
 .scan-button:hover {
+  transform: scale(1.05);
+}
+
+.manual-button {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 15px 30px;
+  border-radius: 25px;
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+  transition: transform 0.2s;
+}
+
+.manual-button:hover {
   transform: scale(1.05);
 }
 
