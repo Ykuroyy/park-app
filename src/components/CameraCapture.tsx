@@ -82,31 +82,33 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       return;
     }
 
-    // キャンバスのサイズをビデオに合わせる
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    // キャンバスのサイズを高解像度に設定
+    const scale = 2;
+    canvas.width = (video.videoWidth || 640) * scale;
+    canvas.height = (video.videoHeight || 480) * scale;
 
-    // 画像を描画
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // 高解像度で画像を描画
+    ctx.scale(scale, scale);
+    ctx.drawImage(video, 0, 0, canvas.width / scale, canvas.height / scale);
     
     // 車番認識用の画像前処理
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     
-    // コントラスト強化と二値化
+    // 数字認識に最適化した画像処理
     for (let i = 0; i < data.length; i += 4) {
       // グレースケール変換
       const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
       
-      // コントラスト強化
-      const enhanced = ((gray - 128) * 1.8) + 128;
+      // より強力なコントラスト強化（数字の線をはっきりさせる）
+      const enhanced = ((gray - 128) * 2.2) + 128;
       
-      // 車番は通常白地に黒文字なので、それに最適化した二値化
+      // 数字認識に最適化した二値化
       let final;
-      if (enhanced > 140) {
+      if (enhanced > 130) {
         final = 255; // 白背景
       } else {
-        final = 0;   // 黒文字
+        final = 0;   // 黒文字（数字）
       }
       
       data[i] = final;     // R
@@ -133,10 +135,14 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
             setDebugInfo(`英語認識中: ${progress}%`);
           }
         },
-        // 数字・英字に特化した設定
-        psm: 6, // 一様なブロックのテキスト
-        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-',
-        tessedit_char_blacklist: ''
+        // 数字認識に特化した設定
+        psm: 8, // 単一の単語として扱う（数字に最適）
+        tessedit_char_whitelist: '0123456789-',
+        tessedit_char_blacklist: '',
+        // 数字認識の精度を上げる設定
+        tessedit_zero_rejection: '1',
+        classify_enable_learning: '0',
+        classify_enable_adaptive_matcher: '0'
       });
 
       const detectedText = result.data.text.trim();
