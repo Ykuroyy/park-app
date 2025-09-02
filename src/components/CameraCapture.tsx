@@ -130,16 +130,16 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
     console.log('撮影完了');
 
     try {
-      // Python PaddleOCR APIで高精度認識
-      setDebugInfo('OCR開始... PaddleOCRで日本語認識中');
+      // Netlify Functions OCRで高精度認識
+      setDebugInfo('OCR開始... サーバーで日本語認識中');
       
       // 画像をBase64に変換
       const imageDataUrl = canvas.toDataURL('image/jpeg', 0.9);
       
       setDebugInfo('画像をサーバーに送信中...');
       
-      // Python OCR APIを呼び出し
-      const response = await fetch('/api/ocr', {
+      // Netlify Functions OCR APIを呼び出し
+      const response = await fetch('/.netlify/functions/ocr', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -162,7 +162,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       const detectedText = result.detected_text || '';
       const confidence = result.confidence || 0;
       
-      setDebugInfo(`🎯 PaddleOCR結果:\n検出テキスト: "${detectedText}"\n信頼度: ${confidence}%\n\n✨ 高精度日本語認識`);
+      setDebugInfo(`🎯 OCR結果:\n検出テキスト: "${detectedText}"\n信頼度: ${confidence}%\n\n✨ サーバーサイド日本語認識`);
       
       // PaddleOCRの結果がある場合は直接使用
       let plateInfo = null;
@@ -192,7 +192,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
     } catch (err) {
       console.error('OCRエラー:', err);
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(`画像の解析中にエラーが発生しました: ${errorMessage}\n\nPython OCR APIに接続できない可能性があります。`);
+      setError(`画像の解析中にエラーが発生しました: ${errorMessage}\n\nサーバーのOCR APIに接続できない可能性があります。`);
     } finally {
       setIsProcessing(false);
     }

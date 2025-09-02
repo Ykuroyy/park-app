@@ -1,124 +1,124 @@
-from http.server import BaseHTTPRequestHandler
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import json
 import base64
 import io
 import re
 from PIL import Image
 import numpy as np
-import cv2
 
-# Note: PaddleOCR import will be handled with try-catch for local development
+# Note: PaddleOCR import will be handled with try-catch for deployment
 try:
     import paddleocr
+    import cv2
     # 日本語特化のPaddleOCR初期化
     ocr = paddleocr.PaddleOCR(
         use_angle_cls=True, 
         lang='japan',  # 日本語認識
-        show_log=False,
-        det_algorithm='DB++',  # より高精度な検出
-        rec_algorithm='CRNN'   # テキスト認識アルゴリズム
+        show_log=False
     )
     PADDLE_AVAILABLE = True
 except ImportError:
     PADDLE_AVAILABLE = False
     print("PaddleOCR not available, using mock response")
 
-class handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        try:
-            # CORS headers
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-            self.end_headers()
+app = Flask(__name__)
+CORS(app)  # CORS有効化
 
-            # リクエストボディを読み取り
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            data = json.loads(post_data.decode('utf-8'))
+@app.route('/api/ocr', methods=['POST', 'OPTIONS'])
+def ocr_endpoint():
+    if request.method == 'OPTIONS':
+        # CORS preflight request
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        return response
 
-            # Base64画像をデコード
-            image_data = data['image']
-            if image_data.startswith('data:image'):
-                image_data = image_data.split(',')[1]
-            
-            image_bytes = base64.b64decode(image_data)
-            image = Image.open(io.BytesIO(image_bytes))
-            
+    try:
+        # リクエストデータを取得
+        data = request.get_json()
+        if not data or 'image' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'No image data provided'
+            }), 400
+
+        # Base64画像をデコード
+        image_data = data['image']
+        if image_data.startswith('data:image'):
+            image_data = image_data.split(',')[1]
+        
+        image_bytes = base64.b64decode(image_data)
+        image = Image.open(io.BytesIO(image_bytes))
+        
+        if PADDLE_AVAILABLE:
             # 画像の前処理（車番認識用）
             processed_image = preprocess_license_plate(image)
             
-            if PADDLE_AVAILABLE:
-                # PaddleOCRで文字認識
-                result = ocr.ocr(processed_image, cls=True)
-                detected_text = extract_text_from_paddle_result(result)
-            else:
-                # 開発用のモックレスポンス
-                detected_text = "品川 500 あ 12-34"
-            
-            print(f"検出されたテキスト: {detected_text}")
-            
-            # 日本のナンバープレート形式をパース
-            plate_info = parse_japanese_license_plate(detected_text)
-            
-            response = {
-                'success': True,
-                'detected_text': detected_text,
-                'plate_info': plate_info,
-                'confidence': 95 if PADDLE_AVAILABLE else 85
-            }
-            
-            self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
-            
-        except Exception as e:
-            print(f"エラー: {str(e)}")
-            error_response = {
-                'success': False,
-                'error': str(e),
-                'detected_text': '',
-                'confidence': 0
-            }
-            self.wfile.write(json.dumps(error_response).encode('utf-8'))
-
-    def do_OPTIONS(self):
-        # CORS preflight request
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.end_headers()
+            # PaddleOCRで文字認識
+            result = ocr.ocr(processed_image, cls=True)
+            detected_text = extract_text_from_paddle_result(result)
+        else:
+            # 開発用のモックレスポンス（デプロイ時はPaddleOCRが利用可能になる）
+            detected_text = "品川 500 あ 12-34"
+        
+        print(f"検出されたテキスト: {detected_text}")
+        
+        # 日本のナンバープレート形式をパース
+        plate_info = parse_japanese_license_plate(detected_text)
+        
+        response = {
+            'success': True,
+            'detected_text': detected_text,
+            'plate_info': plate_info,
+            'confidence': 95 if PADDLE_AVAILABLE else 85
+        }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        print(f"エラー: {str(e)}")
+        error_response = {
+            'success': False,
+            'error': str(e),
+            'detected_text': '',
+            'confidence': 0
+        }
+        return jsonify(error_response), 500
 
 def preprocess_license_plate(image):
     """車番認識用の画像前処理"""
-    # PILからOpenCV形式に変換
+    # PILからnumpy配列に変換
     img_array = np.array(image)
     if len(img_array.shape) == 3 and img_array.shape[2] == 4:
         # RGBA → RGB
-        img_array = cv2.cvtColor(img_array, cv2.COLOR_RGBA2RGB)
+        img_array = img_array[:, :, :3]
     
-    # グレースケール変換
-    gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-    
-    # コントラスト強化
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-    enhanced = clahe.apply(gray)
-    
-    # ガウシアンブラー（ノイズ除去）
-    blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
-    
-    # 適応的二値化
-    binary = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-        cv2.THRESH_BINARY, 15, 10
-    )
-    
-    # モルフォロジー処理（文字の補正）
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-    processed = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
-    
-    return processed
+    if not PADDLE_AVAILABLE:
+        return img_array
+        
+    # OpenCV使用可能な場合の高度な前処理
+    try:
+        # グレースケール変換
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        
+        # コントラスト強化
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+        enhanced = clahe.apply(gray)
+        
+        # ガウシアンブラー（ノイズ除去）
+        blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
+        
+        # 適応的二値化
+        binary = cv2.adaptiveThreshold(
+            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+            cv2.THRESH_BINARY, 15, 10
+        )
+        
+        return binary
+    except:
+        return img_array
 
 def extract_text_from_paddle_result(result):
     """PaddleOCRの結果からテキストを抽出"""
@@ -215,3 +215,7 @@ def parse_japanese_license_plate(text):
             break
     
     return result
+
+# Vercel用のハンドラー
+def handler(event, context):
+    return app(event, context)
