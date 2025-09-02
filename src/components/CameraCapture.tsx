@@ -82,46 +82,118 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
     }
 
     // キャンバスのサイズをビデオに合わせる（超高解像度で処理）
-    const scale = 3; // 解像度を3倍に増加
+    const scale = 4; // 解像度を4倍に増加（より高精度）
     canvas.width = (video.videoWidth || 640) * scale;
     canvas.height = (video.videoHeight || 480) * scale;
 
     console.log('キャンバスサイズ:', canvas.width, 'x', canvas.height);
 
     // 高品質な描画設定
-    ctx.imageSmoothingEnabled = false; // ピクセル補間を無効にしてシャープに
+    ctx.imageSmoothingEnabled = true; // アンチエイリアスを有効に
+    ctx.imageSmoothingQuality = 'high';
     ctx.scale(scale, scale);
     ctx.drawImage(video, 0, 0, canvas.width / scale, canvas.height / scale);
     
-    // より積極的な画像前処理
+    // 改良された画像前処理（シャープネスとエッジ強調）
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
+    const width = canvas.width;
+    const height = canvas.height;
     
-    // 二値化とコントラスト強化
+    // 1. グレースケール変換
+    const grayData = new Float32Array(width * height);
     for (let i = 0; i < data.length; i += 4) {
-      // RGB to グレースケール
-      const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+      const idx = i / 4;
+      grayData[idx] = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    }
+    
+    // 2. アンシャープマスク（シャープネス強調）
+    const sharpened = new Float32Array(width * height);
+    const radius = 2;
+    const amount = 1.5;
+    
+    for (let y = radius; y < height - radius; y++) {
+      for (let x = radius; x < width - radius; x++) {
+        const idx = y * width + x;
+        let sum = 0;
+        let count = 0;
+        
+        // ガウシアンブラー
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            const nIdx = (y + dy) * width + (x + dx);
+            const weight = Math.exp(-(dx * dx + dy * dy) / (2 * radius * radius));
+            sum += grayData[nIdx] * weight;
+            count += weight;
+          }
+        }
+        
+        const blurred = sum / count;
+        sharpened[idx] = grayData[idx] + amount * (grayData[idx] - blurred);
+      }
+    }
+    
+    // 3. 適応的二値化（Otsu法）
+    const histogram = new Array(256).fill(0);
+    for (let i = 0; i < sharpened.length; i++) {
+      const val = Math.max(0, Math.min(255, Math.round(sharpened[i])));
+      histogram[val]++;
+    }
+    
+    // Otsu閾値計算
+    let total = sharpened.length;
+    let sum = 0;
+    for (let i = 0; i < 256; i++) sum += i * histogram[i];
+    
+    let sumB = 0;
+    let wB = 0;
+    let wF = 0;
+    let maxVar = 0;
+    let threshold = 0;
+    
+    for (let t = 0; t < 256; t++) {
+      wB += histogram[t];
+      if (wB === 0) continue;
       
-      // 強力なコントラスト強化（2.0倍に増加）
-      const contrast = 2.0;
-      const enhanced = ((gray - 128) * contrast) + 128;
+      wF = total - wB;
+      if (wF === 0) break;
       
-      // 二値化に近い処理（閾値120）
-      const threshold = 120;
-      let final;
-      if (enhanced > threshold + 30) {
-        final = Math.min(255, enhanced * 1.2); // 白をより白く
-      } else if (enhanced < threshold - 30) {
-        final = Math.max(0, enhanced * 0.7);   // 黒をより黒く
+      sumB += t * histogram[t];
+      
+      const mB = sumB / wB;
+      const mF = (sum - sumB) / wF;
+      
+      const varBetween = wB * wF * (mB - mF) * (mB - mF);
+      
+      if (varBetween > maxVar) {
+        maxVar = varBetween;
+        threshold = t;
+      }
+    }
+    
+    // 4. 最終的な二値化とコントラスト調整
+    for (let i = 0; i < data.length; i += 4) {
+      const idx = i / 4;
+      let val = sharpened[idx] || grayData[idx];
+      
+      // より積極的なコントラスト強化
+      const contrast = 2.5;
+      val = ((val - 128) * contrast) + 128;
+      
+      // 適応的閾値で二値化
+      if (val > threshold + 10) {
+        val = 255;
+      } else if (val < threshold - 10) {
+        val = 0;
       } else {
-        final = enhanced > threshold ? 220 : 60; // 中間値を二値化
+        val = val > threshold ? 230 : 25;
       }
       
-      final = Math.max(0, Math.min(255, final));
+      val = Math.max(0, Math.min(255, val));
       
-      data[i] = final;     // R
-      data[i + 1] = final; // G  
-      data[i + 2] = final; // B
+      data[i] = val;     // R
+      data[i + 1] = val; // G  
+      data[i + 2] = val; // B
     }
     
     ctx.putImageData(imageData, 0, 0);
@@ -132,18 +204,34 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
     console.log('撮影した画像データ:', capturedImageData.substring(0, 100) + '...');
 
     try {
-      // Tesseract.jsでOCR実行
+      // Tesseract.jsでOCR実行（改良版）
       console.log('OCR開始...');
-      // 複数のPSMモードで試行して最適な結果を選択
-      const psmModes = [8, 7, 13, 6]; // 最適な順で試行
+      // ナンバープレートに最適化されたPSMモード
+      const psmModes = [11, 8, 7, 13]; // 11: スパーステキスト、8: 単一単語、7: 単一テキスト行
       let bestResult = null;
       let bestConfidence = 0;
+
+      // 日本のナンバープレートで使用される全ての文字
+      const plateChars = '0123456789' + 
+        'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん' +
+        '品川足立練馬世田谷杉並江東葛飾江戸川' +
+        '横浜川崎相模湘南' +
+        '名古屋豊田岡崎' +
+        '大阪なにわ和泉堺' +
+        '神戸姫路' +
+        '京都' +
+        '福岡北九州筑豊' +
+        '札幌函館旭川' +
+        '仙台宮城' +
+        '新潟長岡' +
+        '広島福山' +
+        '・ー－-';
 
       for (const psm of psmModes) {
         console.log(`PSMモード ${psm} で試行中...`);
         
         try {
-          const result = await Tesseract.recognize(canvas, 'jpn+eng', {
+          const result = await Tesseract.recognize(canvas, 'jpn', {
             logger: (m) => {
               if (m.status === 'recognizing text') {
                 const progress = Math.round(m.progress * 100);
@@ -151,16 +239,24 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
               }
             },
             // 最適化されたOCR設定
-            oem: '1', // LSTM OCRエンジン
-            psm: psm.toString(),
+            psm: psm,
             // ナンバープレート特化設定
-            preserve_interword_spaces: '1',
-            tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん品川新宿渋谷世田谷練馬板橋足立葛飾江戸川台東墨田荒川北豊島中野杉並目黒大田港千代田中央文京江東横浜川崎相模厚木藤沢茅ヶ崎平塚小田原',
+            preserve_interword_spaces: '0',
+            tessedit_char_whitelist: plateChars,
             tessedit_pageseg_mode: psm.toString(),
+            // 日本語認識の最適化
+            language_model_penalty_non_dict_word: '0.15',
+            language_model_penalty_non_freq_dict_word: '0.1',
+            tessedit_zero_rejection: '1',
+            tessedit_zero_kelvin_rejection: '1',
+            edges_max_children_per_outline: '40',
             // 追加の最適化
             tessedit_char_blacklist: '!@#$%^&*()_+{}|:<>?[];\'",./\\`~',
             load_system_dawg: '0',
             load_freq_dawg: '0',
+            textord_heavy_nr: '1',
+            segment_penalty_garbage: '1',
+            segment_penalty_dict_nonword: '1',
           });
 
           console.log(`PSM${psm} 結果:`, result.data.text.trim(), `信頼度: ${result.data.confidence}`);
@@ -171,7 +267,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
           }
 
           // 高信頼度の結果が得られたら早期終了
-          if (result.data.confidence > 70) {
+          if (result.data.confidence > 60) {
             console.log(`高信頼度結果を取得、PSM${psm}で終了`);
             bestResult = result;
             break;
@@ -196,7 +292,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       console.log('最終信頼度:', result.data.confidence);
 
       // より寛容な閾値に変更
-      if (!detectedText || result.data.confidence < 15) {
+      if (!detectedText || result.data.confidence < 10) {
         setError(`テキストが検出されませんでした。(信頼度: ${Math.round(result.data.confidence)}%)\n\n🔄 複数のモードで試行済み\n\n💡 コツ:\n・プレートが水平になるように\n・文字がはっきり見えるまで近づく\n・影がかからないように\n・手動入力もご利用ください`);
         setIsProcessing(false);
         return;
@@ -216,42 +312,53 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       }
     } catch (err) {
       console.error('OCRエラー:', err);
-      setError(`画像の解析中にエラーが発生しました: ${err.message}`);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(`画像の解析中にエラーが発生しました: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
     }
   }, [onPlateDetected, onClose]);
 
-  // 日本のナンバープレート形式をパース
+  // 日本のナンバープレート形式をパース（改良版）
   const parseJapanesePlate = (text: string): PlateInfo | null => {
     console.log('原文:', text);
     
     // より積極的なテキストクリーンアップ
     let cleanText = text
       .replace(/\r?\n/g, ' ') // 改行をスペースに
+      .replace(/[・]/g, ' ') // 中点をスペースに
       .replace(/\s+/g, ' ') // 複数のスペースを1つに
       .replace(/[^\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\-\s０-９]/g, '') // 不要な文字を削除
       .replace(/[０-９]/g, (match) => String.fromCharCode(match.charCodeAt(0) - 0xFF10 + 0x30)) // 全角数字を半角に
       .replace(/[Ａ-Ｚａ-ｚ]/g, (match) => String.fromCharCode(match.charCodeAt(0) - 0xFF10 - 7)) // 全角英字を半角に
-      // よくある誤認識を修正
+      // よくある誤認識を修正（改良版）
       .replace(/[|Il1]/g, '1') // 縦線、I、l、1を統一
-      .replace(/[Oo0]/g, '0') // O、o、0を統一
-      .replace(/[Ss5]/g, '5') // S、s、5を統一
-      .replace(/[Zz2]/g, '2') // Z、z、2を統一
-      .replace(/[Bb8]/g, '8') // B、b、8を統一
-      .replace(/[Gg6]/g, '6') // G、g、6を統一
+      .replace(/[Oo]/g, '0') // O、oを0に
+      .replace(/[Ss]/g, '5') // S、sを5に
+      .replace(/[Zz]/g, '2') // Z、zを2に
+      .replace(/[Bb]/g, '8') // B、bを8に
+      .replace(/[Gg]/g, '6') // G、gを6に
+      .replace(/[qg]/g, '9') // q、gを9に
+      // 数字の連続を正規化
+      .replace(/(\d)\s+(\d)/g, '$1$2') // 数字間のスペースを削除
       .trim();
 
     console.log('クリーンアップ後:', cleanText);
 
-    // より寛容なパターンマッチング
+    // より寛容なパターンマッチング（改良版）
     const patterns = [
+      // 完全形式: "品川 500 あ 12-34" または "品川 5 00 あ 12-34"
+      /([^\d\s]{1,4})\s*(\d{1,3})\s*(\d{0,2})\s*([あ-んア-ン])\s*(\d{1,2}[-－−]?\d{2})/,
       // 完全形式: "品川 500 あ 12-34"
       /([^\d\s]{1,4})\s*(\d{3})\s*([あ-んア-ン])\s*(\d{1,2}[-－−]\d{2})/,
       // ハイフンなし: "品川 500 あ 1234"  
       /([^\d\s]{1,4})\s*(\d{3})\s*([あ-んア-ン])\s*(\d{4})/,
+      // 分類番号が分離: "品川 5 00 あ 1234"
+      /([^\d\s]{1,4})\s*(\d)\s*(\d{2})\s*([あ-んア-ン])\s*(\d{4})/,
       // 分類番号なし: "品川 あ 12-34"
       /([^\d\s]{1,4})\s*([あ-んア-ン])\s*(\d{1,2}[-－−]\d{2})/,
+      // 地域名と番号のみ: "品川 1234"
+      /([^\d\s]{1,4})\s*(\d{4})/,
       // 最低限: 地域名と数字
       /([^\d\s]{2,4})\s*.*(\d{1,2}[-－−]?\d{2})/,
     ];
@@ -263,15 +370,31 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       
       if (match) {
         let region = match[1] || '';
-        let classification = match[2] || '';
-        let hiragana = match[3] || '';
-        let number = match[4] || match[3] || '';
+        let classification = '';
+        let hiragana = '';
+        let number = '';
 
         // パターンによって値を調整
-        if (patterns.indexOf(pattern) === 2) { // 分類番号なしパターン
+        if (i === 0) { // 分離した分類番号パターン
+          classification = (match[2] || '') + (match[3] || '');
+          hiragana = match[4] || '';
+          number = match[5] || '';
+        } else if (i === 1 || i === 2) { // 完全形式
+          classification = match[2] || '';
+          hiragana = match[3] || '';
+          number = match[4] || '';
+        } else if (i === 3) { // 分類番号が分離
+          classification = match[2] + match[3];
+          hiragana = match[4] || '';
+          number = match[5] || '';
+        } else if (i === 4) { // 分類番号なしパターン
           hiragana = match[2];
           number = match[3];
           classification = '';
+        } else if (i === 5) { // 地域名と番号のみ
+          number = match[2] || '';
+        } else if (i === 6) { // 最低限
+          number = match[2] || '';
         }
 
         // ハイフンがない4桁の場合、ハイフンを挿入
