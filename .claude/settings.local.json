@@ -10,7 +10,8 @@
       "Bash(git push:*)",
       "Bash(npm uninstall:*)",
       "Bash(npx expo export:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": [],
     "ask": []

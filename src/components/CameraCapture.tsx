@@ -298,7 +298,11 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
         return;
       }
 
-      const plateInfo = parseJapanesePlate(detectedText);
+      // 複数の結果を組み合わせて解析
+      const combinedText = allResults.map(r => r.data.text.trim()).join(' ');
+      console.log('全結果の結合:', combinedText);
+      
+      const plateInfo = parseJapanesePlate(detectedText) || parseJapanesePlate(combinedText);
       console.log('パース結果:', plateInfo);
 
       if (plateInfo && (plateInfo.region || plateInfo.number)) {
@@ -308,7 +312,12 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
           onClose();
         }, 1500);
       } else {
-        setError(`ナンバープレートとして認識できませんでした。\n検出テキスト: "${detectedText}"\n手動入力をお試しください。`);
+        // デバッグ情報を含めたエラーメッセージ
+        const debugInfo = allResults.map((r, i) => 
+          `方法${i+1}: "${r.data.text.trim()}" (信頼度: ${Math.round(r.data.confidence)}%)`
+        ).join('\n');
+        
+        setError(`ナンバープレートとして認識できませんでした。\n\n📝 検出結果:\n${debugInfo}\n\n💡 ヒント:\n・カメラを車番に近づける\n・明るい場所で撮影\n・手動入力もご利用ください`);
       }
     } catch (err) {
       console.error('OCRエラー:', err);
