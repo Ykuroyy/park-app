@@ -1,15 +1,10 @@
 # Railway用 軽量Python Dockerfile
 FROM python:3.11-slim
 
-# システムパッケージの更新とOpenCV用ライブラリのインストール
+# 必要最小限のライブラリのインストール
 RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
     libgomp1 \
-    libgl1-mesa-dri \
-    libglib2.0-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 作業ディレクトリを設定
@@ -25,8 +20,7 @@ COPY app.py .
 # ポート8080を公開
 EXPOSE 8080
 
-# PaddleOCRのダウンロードを事前実行（ビルド時にモデルをダウンロード）
-RUN python -c "import paddleocr; paddleocr.PaddleOCR(use_angle_cls=True, lang='japan', show_log=False, use_gpu=False)"
+# PaddleOCRモデルは初回実行時にダウンロード（ビルド時は不要）
 
 # アプリケーションを起動
 CMD ["python", "app.py"]
