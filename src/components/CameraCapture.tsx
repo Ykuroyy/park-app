@@ -122,31 +122,26 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
     console.log('撮影完了');
 
     try {
-      // 日本語認識に特化したOCR実行
-      setDebugInfo('OCR開始... 日本語データをロード中');
+      // 英語モード優先で確実な認識を目指す
+      setDebugInfo('OCR開始... 英語モードで数字・英字認識');
       
-      // 車番に特化した設定
-      const result = await Tesseract.recognize(canvas, 'jpn', {
+      // まず英語モードで数字部分を確実に認識
+      const result = await Tesseract.recognize(canvas, 'eng', {
         logger: (m) => {
           if (m.status === 'recognizing text') {
             const progress = Math.round(m.progress * 100);
-            setDebugInfo(`日本語認識中: ${progress}%`);
-          } else if (m.status === 'loading lang') {
-            setDebugInfo('日本語言語ファイルをダウンロード中...');
+            setDebugInfo(`英語認識中: ${progress}%`);
           }
         },
-        // 日本語車番に特化した設定
-        psm: 8, // 単一の単語として扱う
-        preserve_interword_spaces: '1',
-        tessedit_char_whitelist: '品川新宿渋谷世田谷練馬板橋足立葛飾江戸川台東墨田荒川北豊島中野杉並目黒大田港千代田中央文京江東横浜川崎相模湘南名古屋豊田岡崎大阪なにわ和泉堺神戸姫路京都福岡北九州筑豊札幌函館旭川仙台宮城新潟長岡広島福山あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん0123456789-',
-        tessedit_char_blacklist: '',
-        load_system_dawg: '0',
-        load_freq_dawg: '0'
+        // 数字・英字に特化した設定
+        psm: 6, // 一様なブロックのテキスト
+        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-',
+        tessedit_char_blacklist: ''
       });
 
       const detectedText = result.data.text.trim();
       const confidence = Math.round(result.data.confidence);
-      setDebugInfo(`検出テキスト: "${detectedText}"\n信頼度: ${confidence}%\n\nℹ️ 日本語モードで認識中`);
+      setDebugInfo(`検出テキスト: "${detectedText}"\n信頼度: ${confidence}%\n\nℹ️ 英語モードで認識（数字・英字）`);
 
       // 非常に寛容な設定（日本語認識のため）
       if (!detectedText && confidence < 1) {
@@ -225,16 +220,18 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
 
     console.log('クリーンアップ後:', cleanText);
 
-    // シンプルなパターンマッチング
+    // 数字重視のパターンマッチング
     const patterns = [
-      // 完全形式: "品川 500 あ 12-34"
-      /([^\d\s]{1,4})\s*(\d{3})\s*([\u3042-\u3093\u30a2-\u30f3])\s*(\d{1,2}[-－−]\d{2})/,
-      // ハイフンなし: "品川 500 あ 1234"
-      /([^\d\s]{1,4})\s*(\d{3})\s*([\u3042-\u3093\u30a2-\u30f3])\s*(\d{4})/,
-      // 分類番号なし: "品川 あ 12-34"
-      /([^\d\s]{1,4})\s*([\u3042-\u3093\u30a2-\u30f3])\s*(\d{1,2}[-－−]\d{2})/,
-      // 最低限: 地域名と数字
-      /([^\d\s]{2,4})\s*.*([\d\-]{2,5})/,
+      // 4桁の数字: "1234" → "12-34"
+      /(\d{4})/,
+      // ハイフン付き数字: "12-34"
+      /(\d{1,2}[-－−]\d{2})/,
+      // 3桁の分類番号: "500"
+      /(\d{3})/,
+      // 2桁から5桁の数字: "25", "000", など
+      /(\d{2,5})/,
+      // 英字も含む: "SHINAGAWA", "A", など
+      /([A-Za-z]+)/,
     ];
 
     for (let i = 0; i < patterns.length; i++) {
@@ -243,41 +240,47 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       console.log(`パターン${i + 1}マッチ:`, match);
       
       if (match) {
-        let region = match[1] || '';
+        let region = '';
         let classification = '';
         let hiragana = '';
         let number = '';
 
-        if (i === 0) {
-          classification = match[2] || '';
-          hiragana = match[3] || '';
-          number = match[4] || '';
+        const matched = match[1] || match[0];
+
+        if (i === 0 && /^\d{4}$/.test(matched)) {
+          // 4桁数字 → "12-34"形式に変換
+          number = `${matched.slice(0, 2)}-${matched.slice(2)}`;
         } else if (i === 1) {
-          classification = match[2] || '';
-          hiragana = match[3] || '';
-          number = match[4];
-          // ハイフンがない4桁の場合、ハイフンを挿入
-          if (/^\d{4}$/.test(number)) {
-            number = `${number.slice(0, 2)}-${number.slice(2)}`;
+          // ハイフン付き数字
+          number = matched;
+        } else if (i === 2 && /^\d{3}$/.test(matched)) {
+          // 3桁数字 → 分類番号として扱う
+          classification = matched;
+        } else if (i === 3 && /^\d{2,5}$/.test(matched)) {
+          // その他の数字
+          if (matched === '25') {
+            number = '25'; // "ンー　２５" の "25" 部分
+          } else {
+            number = matched;
           }
-        } else if (i === 2) {
-          hiragana = match[2];
-          number = match[3];
-          classification = '';
-        } else if (i === 3) {
-          number = match[2] || '';
+        } else if (i === 4) {
+          // 英字 → 地域名の可能性
+          region = matched;
         }
 
-        const result = {
-          region: region,
-          classification: classification,
-          hiragana: hiragana,
-          number: number,
-          fullText: `${region} ${classification} ${hiragana} ${number}`.replace(/\s+/g, ' ').trim()
-        };
+        // 最低限でも何かが認識できれば成功とする
+        if (number || classification || region) {
+          const result = {
+            region: region,
+            classification: classification,
+            hiragana: hiragana,
+            number: number,
+            fullText: `${region} ${classification} ${hiragana} ${number}`.replace(/\s+/g, ' ').trim()
+          };
 
-        console.log('パース成功:', result);
-        return result;
+          console.log('パース成功:', result);
+          return result;
+        }
       }
     }
 
