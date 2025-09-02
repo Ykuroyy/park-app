@@ -88,6 +88,33 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
 
     // 画像を描画
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // 車番認識用の画像前処理
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    
+    // コントラスト強化と二値化
+    for (let i = 0; i < data.length; i += 4) {
+      // グレースケール変換
+      const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+      
+      // コントラスト強化
+      const enhanced = ((gray - 128) * 1.8) + 128;
+      
+      // 車番は通常白地に黒文字なので、それに最適化した二値化
+      let final;
+      if (enhanced > 140) {
+        final = 255; // 白背景
+      } else {
+        final = 0;   // 黒文字
+      }
+      
+      data[i] = final;     // R
+      data[i + 1] = final; // G  
+      data[i + 2] = final; // B
+    }
+    
+    ctx.putImageData(imageData, 0, 0);
 
     // 撮影した画像を保存
     const capturedImageData = canvas.toDataURL('image/jpeg', 0.8);
@@ -95,24 +122,35 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
     console.log('撮影完了');
 
     try {
-      // シンプルなOCR実行
-      setDebugInfo('OCR開始...');
+      // 日本語認識に特化したOCR実行
+      setDebugInfo('OCR開始... 日本語データをロード中');
       
-      const result = await Tesseract.recognize(canvas, 'jpn+eng', {
+      // 車番に特化した設定
+      const result = await Tesseract.recognize(canvas, 'jpn', {
         logger: (m) => {
           if (m.status === 'recognizing text') {
             const progress = Math.round(m.progress * 100);
-            setDebugInfo(`認識中: ${progress}%`);
+            setDebugInfo(`日本語認識中: ${progress}%`);
+          } else if (m.status === 'loading lang') {
+            setDebugInfo('日本語言語ファイルをダウンロード中...');
           }
-        }
+        },
+        // 日本語車番に特化した設定
+        psm: 8, // 単一の単語として扱う
+        preserve_interword_spaces: '1',
+        tessedit_char_whitelist: '品川新宿渋谷世田谷練馬板橋足立葛飾江戸川台東墨田荒川北豊島中野杉並目黒大田港千代田中央文京江東横浜川崎相模湘南名古屋豊田岡崎大阪なにわ和泉堺神戸姫路京都福岡北九州筑豊札幌函館旭川仙台宮城新潟長岡広島福山あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん0123456789-',
+        tessedit_char_blacklist: '',
+        load_system_dawg: '0',
+        load_freq_dawg: '0'
       });
 
       const detectedText = result.data.text.trim();
       const confidence = Math.round(result.data.confidence);
-      setDebugInfo(`検出テキスト: "${detectedText}"\n信頼度: ${confidence}%`);
+      setDebugInfo(`検出テキスト: "${detectedText}"\n信頼度: ${confidence}%\n\nℹ️ 日本語モードで認識中`);
 
-      if (!detectedText) {
-        setError(`テキストが検出されませんでした。\n\n💡 コツ:\n・プレートにもっと近づく\n・明るい場所で撮影\n・水平に撮影\n\n検出テキスト: "${detectedText}"`);
+      // 非常に寛容な設定（日本語認識のため）
+      if (!detectedText && confidence < 1) {
+        setError(`日本語認識に失敗しました。\n\n💡 コツ:\n・漢字とひらがながはっきり見えるように\n・プレートにさらに近づく\n・明るい場所で撮影\n\n検出テキスト: "${detectedText}"`);
         setIsProcessing(false);
         return;
       }
@@ -127,7 +165,44 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
           onClose();
         }, 1500);
       } else {
-        setError(`車番として認識できませんでした。\n\n📝 検出されたテキスト:\n"${detectedText}" (信頼度: ${Math.round(result.data.confidence)}%)\n\n💡 コツ:\n・文字がはっきり見えるまで近づく\n・明るい場所で撮影\n・水平に撮影\n・手動入力もお試しください`);
+        // 日本語認識がうまくいかない場合、英語モードで再試行
+        setDebugInfo(`1回目失敗: "${detectedText}"\n英語モードで再試行...`);
+        
+        try {
+          const engResult = await Tesseract.recognize(canvas, 'eng', {
+            logger: (m) => {
+              if (m.status === 'recognizing text') {
+                const progress = Math.round(m.progress * 100);
+                setDebugInfo(`英語認識中: ${progress}%`);
+              }
+            },
+            psm: 8,
+            tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-'
+          });
+          
+          const engText = engResult.data.text.trim();
+          const engConfidence = Math.round(engResult.data.confidence);
+          
+          const combinedInfo = `日本語: "${detectedText}" (${confidence}%)\n英語: "${engText}" (${engConfidence}%)\n\n🔍 組み合わせて解析中...`;
+          setDebugInfo(combinedInfo);
+          
+          // 組み合わせたテキストで再パース
+          const combinedText = `${detectedText} ${engText}`.trim();
+          const combinedPlateInfo = parseJapanesePlate(combinedText);
+          
+          if (combinedPlateInfo && (combinedPlateInfo.region || combinedPlateInfo.number || combinedPlateInfo.hiragana)) {
+            setShowSuccess(true);
+            setTimeout(() => {
+              onPlateDetected(combinedPlateInfo);
+              onClose();
+            }, 1500);
+            return;
+          }
+        } catch (engErr) {
+          console.error('英語認識エラー:', engErr);
+        }
+        
+        setError(`車番として認識できませんでした。\n\n📝 検出結果:\n日本語: "${detectedText}" (${confidence}%)\n\n💡 コツ:\n・漢字とひらがながはっきり見えるように\n・プレートを画面いっぱいに\n・手動入力もお試しください`);
       }
     } catch (err) {
       console.error('OCRエラー:', err);
