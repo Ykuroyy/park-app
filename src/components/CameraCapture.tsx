@@ -142,7 +142,9 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒タイムアウト
       
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8080'}/api/ocr`, {
+      const apiUrl = 'https://respectful-charisma-production.up.railway.app';
+      console.log('API URL:', apiUrl); // デバッグ用
+      const response = await fetch(`${apiUrl}/api/ocr`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
