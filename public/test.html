@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Railway API 接続テスト</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <h1>🔧 Railway API 接続テスト</h1>
+    
+    <button onclick="testHealthAPI()" style="padding: 20px; font-size: 18px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 10px;">
+        ヘルスチェックAPI テスト
+    </button>
+    
+    <button onclick="testOCRAPI()" style="padding: 20px; font-size: 18px; background: #2196F3; color: white; border: none; border-radius: 8px; margin: 10px;">
+        OCR API テスト
+    </button>
+    
+    <div id="result" style="margin-top: 20px; padding: 20px; background: #f5f5f5; border-radius: 8px; font-family: monospace; white-space: pre-wrap;"></div>
+
+    <script>
+        const API_BASE = 'https://respectful-charisma-production.up.railway.app';
+        
+        function log(message) {
+            document.getElementById('result').textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+        }
+        
+        async function testHealthAPI() {
+            log('🔍 ヘルスチェックAPI テスト開始...');
+            
+            try {
+                const response = await fetch(API_BASE + '/health');
+                const data = await response.json();
+                
+                log('✅ 成功: ' + JSON.stringify(data, null, 2));
+            } catch (error) {
+                log('❌ エラー: ' + error.message);
+                log('❌ エラー詳細: ' + JSON.stringify(error, null, 2));
+            }
+        }
+        
+        async function testOCRAPI() {
+            log('🔍 OCR API テスト開始...');
+            
+            try {
+                const testImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+                
+                const response = await fetch(API_BASE + '/api/ocr', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        image: testImage
+                    })
+                });
+                
+                const data = await response.json();
+                log('✅ OCR レスポンス: ' + JSON.stringify(data, null, 2));
+            } catch (error) {
+                log('❌ OCR エラー: ' + error.message);
+                log('❌ OCR エラー詳細: ' + JSON.stringify(error, null, 2));
+            }
+        }
+    </script>
+</body>
+</html>
