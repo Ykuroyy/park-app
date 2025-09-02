@@ -138,7 +138,10 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       
       setDebugInfo('画像をサーバーに送信中...');
       
-      // Railway Python Backend API を呼び出し
+      // Railway Python Backend API を呼び出し（タイムアウト設定）
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒タイムアウト
+      
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8080'}/api/ocr`, {
         method: 'POST',
         headers: {
@@ -146,8 +149,11 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
         },
         body: JSON.stringify({
           image: imageDataUrl
-        })
+        }),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
         throw new Error(`API Error: ${response.status}`);
@@ -191,8 +197,25 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       }
     } catch (err) {
       console.error('OCRエラー:', err);
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(`画像の解析中にエラーが発生しました: ${errorMessage}\n\nRailway Python APIに接続できない可能性があります。`);
+      let errorMessage = '';
+      
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          errorMessage = 'APIリクエストがタイムアウトしました（30秒）';
+        } else if (err.message === 'Load failed') {
+          errorMessage = 'ネットワーク接続エラー - Wi-Fi/モバイル通信を確認してください';
+        } else if (err.message.includes('API Error: 5')) {
+          errorMessage = 'サーバーエラー - バックエンドの処理中にエラーが発生しました';
+        } else if (err.message.includes('API Error: 4')) {
+          errorMessage = 'リクエストエラー - 送信データに問題があります';
+        } else {
+          errorMessage = err.message;
+        }
+      } else {
+        errorMessage = String(err);
+      }
+      
+      setError(`画像の解析中にエラーが発生しました:\n${errorMessage}\n\n🔧 対処法:\n・Wi-Fi接続を確認\n・しばらく待ってから再試行\n・手動入力をお試しください`);
     } finally {
       setIsProcessing(false);
     }
