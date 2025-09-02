@@ -136,14 +136,15 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       // 画像をBase64に変換
       const imageDataUrl = canvas.toDataURL('image/jpeg', 0.9);
       
-      setDebugInfo('画像をサーバーに送信中...');
+      setDebugInfo('🔥 画像をサーバーに送信中... (2025-09-02 18:26)');
       
       // Railway Python Backend API を呼び出し（タイムアウト設定）
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒タイムアウト
       
       const apiUrl = 'https://respectful-charisma-production.up.railway.app';
-      console.log('API URL:', apiUrl); // デバッグ用
+      console.log('🚀 API URL:', apiUrl); // デバッグ用
+      setDebugInfo(`🚀 APIリクエスト送信: ${apiUrl}/api/ocr`);
       const response = await fetch(`${apiUrl}/api/ocr`, {
         method: 'POST',
         headers: {
