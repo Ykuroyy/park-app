@@ -1,7 +1,8 @@
 // Netlify Functions用のOCR API
-// PaddleOCRの代わりにTesseract.jsのNode.js版を使用
+// 複数のOCRサービスを組み合わせて高精度認識を実現
 
 const Tesseract = require('tesseract.js');
+const axios = require('axios');
 
 exports.handler = async (event, context) => {
   // CORS headers
@@ -43,16 +44,46 @@ exports.handler = async (event, context) => {
 
     console.log('OCR処理開始...');
 
-    // Tesseract.jsで日本語＋英語認識（Node.js版は高性能）
-    const result = await Tesseract.recognize(image, 'jpn+eng', {
-      logger: m => console.log(m),
-      // より高精度な設定
-      tessedit_pageseg_mode: Tesseract.PSM.SINGLE_WORD,
-      tessedit_char_whitelist: '品川新宿練馬世田谷杉並江東足立葛飾江戸川板橋台東墨田荒川北豊島中野目黒大田港千代田中央文京渋谷横浜川崎相模湘南名古屋大阪神戸京都福岡札幌仙台広島あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん0123456789-'
-    });
+    let bestResult = null;
+    let bestConfidence = 0;
+    let detectedText = '';
 
-    const detectedText = result.data.text.trim();
-    console.log('検出テキスト:', detectedText);
+    // 戦略1: OCR.space API（無料枠：月500回）
+    try {
+      const ocrSpaceResult = await recognizeWithOCRSpace(image);
+      if (ocrSpaceResult.confidence > bestConfidence) {
+        bestResult = ocrSpaceResult;
+        bestConfidence = ocrSpaceResult.confidence;
+        detectedText = ocrSpaceResult.text;
+      }
+      console.log('OCR.space結果:', ocrSpaceResult.text);
+    } catch (error) {
+      console.log('OCR.space失敗:', error.message);
+    }
+
+    // 戦略2: Tesseract.js（完全無料のフォールバック）
+    try {
+      const tesseractResult = await Tesseract.recognize(image, 'jpn+eng', {
+        logger: m => console.log(m.status, m.progress),
+        tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+        tessedit_char_whitelist: '京都品川新宿練馬世田谷杉並江東足立葛飾江戸川板橋台東墨田荒川北豊島中野目黒大田港千代田中央文京渋谷横浜川崎相模湘南名古屋大阪神戸福岡札幌仙台広島あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん0123456789-',
+        preserve_interword_spaces: '1'
+      });
+
+      const tesseractText = tesseractResult.data.text.trim();
+      const tesseractConf = tesseractResult.data.confidence;
+      
+      console.log('Tesseract.js結果:', tesseractText, 'confidence:', tesseractConf);
+
+      if (tesseractConf > bestConfidence) {
+        bestConfidence = tesseractConf;
+        detectedText = tesseractText;
+      }
+    } catch (error) {
+      console.log('Tesseract.js失敗:', error.message);
+    }
+
+    console.log('最終検出テキスト:', detectedText);
 
     // 日本のナンバープレートをパース
     const plateInfo = parseJapanesePlate(detectedText);
@@ -64,7 +95,8 @@ exports.handler = async (event, context) => {
         success: true,
         detected_text: detectedText,
         plate_info: plateInfo,
-        confidence: Math.round(result.data.confidence)
+        confidence: Math.round(bestConfidence),
+        ocr_method: bestResult ? 'OCR.space' : 'Tesseract.js'
       })
     };
 
@@ -82,6 +114,37 @@ exports.handler = async (event, context) => {
     };
   }
 };
+
+// OCR.space API（無料枠：月500回）
+async function recognizeWithOCRSpace(imageData) {
+  const OCR_SPACE_API_KEY = process.env.OCR_SPACE_API_KEY || 'helloworld'; // 無料デモキー
+  
+  // Base64データからFormDataを作成
+  const formData = new URLSearchParams();
+  formData.append('base64Image', imageData);
+  formData.append('language', 'jpn'); // 日本語
+  formData.append('apikey', OCR_SPACE_API_KEY);
+  formData.append('scale', 'true');
+  formData.append('detectOrientation', 'true');
+  formData.append('OCREngine', '2'); // エンジン2が日本語に適している
+
+  const response = await axios.post('https://api.ocr.space/parse/image', formData, {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  });
+
+  if (response.data.OCRExitCode !== 1) {
+    throw new Error('OCR.space API失敗');
+  }
+
+  const text = response.data.ParsedResults[0]?.ParsedText || '';
+  
+  return {
+    text: text.trim(),
+    confidence: 85 // OCR.spaceは信頼度を返さないため固定値
+  };
+}
 
 function parseJapanesePlate(text) {
   console.log('パース対象:', text);

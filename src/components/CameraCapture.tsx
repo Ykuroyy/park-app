@@ -534,13 +534,25 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       )}
 
       <div className="instructions">
-        <p>📋 使い方:</p>
+        <p>📋 高精度認識のコツ:</p>
         <ul>
-          <li>📷 カメラでスキャン または ✏️ 手動で入力</li>
-          <li>ナンバープレートを枠内に収める</li>
-          <li>明るい場所で撮影する</li>
-          <li>OCRがうまくいかない場合は手動入力をご利用ください</li>
+          <li>🎯 <strong>ナンバープレートが画面の1/2を占める</strong>まで近づく</li>
+          <li>☀️ <strong>明るい場所</strong>で撮影（影を避ける）</li>
+          <li>📐 <strong>水平に撮影</strong>（スマホを傾けない）</li>
+          <li>🔍 <strong>文字がはっきり見える</strong>ことを確認</li>
+          <li>📱 <strong>手ブレしない</strong>よう両手でしっかり持つ</li>
+          <li>🎨 <strong>白いナンバープレート</strong>が最も認識しやすい</li>
         </ul>
+        <div style={{
+          background: '#e3f2fd',
+          padding: '10px',
+          borderRadius: '8px',
+          margin: '10px 0',
+          fontSize: '14px'
+        }}>
+          <p><strong>💡 認識精度向上：</strong></p>
+          <p>高精度OCR.space API（月500回無料）+ Tesseract.js フォールバック で「京都580 あ12-34」のような完全な車番情報を読み取ります。</p>
+        </div>
       </div>
     </div>
   );
