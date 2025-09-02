@@ -138,8 +138,8 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       
       setDebugInfo('画像をサーバーに送信中...');
       
-      // Netlify Functions OCR APIを呼び出し
-      const response = await fetch('/.netlify/functions/ocr', {
+      // Railway Python Backend API を呼び出し
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8080'}/api/ocr`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -162,7 +162,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
       const detectedText = result.detected_text || '';
       const confidence = result.confidence || 0;
       
-      setDebugInfo(`🎯 OCR結果:\n検出テキスト: "${detectedText}"\n信頼度: ${confidence}%\n\n✨ サーバーサイド日本語認識`);
+      setDebugInfo(`🎯 PaddleOCR結果:\n検出テキスト: "${detectedText}"\n信頼度: ${confidence}%\n\n✨ Railway Python + PaddleOCR 日本語認識`);
       
       // PaddleOCRの結果がある場合は直接使用
       let plateInfo = null;
@@ -192,7 +192,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
     } catch (err) {
       console.error('OCRエラー:', err);
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(`画像の解析中にエラーが発生しました: ${errorMessage}\n\nサーバーのOCR APIに接続できない可能性があります。`);
+      setError(`画像の解析中にエラーが発生しました: ${errorMessage}\n\nRailway Python APIに接続できない可能性があります。`);
     } finally {
       setIsProcessing(false);
     }
@@ -551,7 +551,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
           fontSize: '14px'
         }}>
           <p><strong>💡 認識精度向上：</strong></p>
-          <p>高精度OCR.space API（月500回無料）+ Tesseract.js フォールバック で「京都580 あ12-34」のような完全な車番情報を読み取ります。</p>
+          <p>Railway Python + PaddleOCR 日本語特化モードで「京都580 あ12-34」のような完全な車番情報を無料で高精度に読み取ります。</p>
         </div>
       </div>
     </div>

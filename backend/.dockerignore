@@ -1,0 +1,31 @@
+# 不要なファイルをDockerイメージから除外
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+.env
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+*.log
+
+# Git関連
+.git/
+.gitignore
+
+# エディター関連
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS関連
+.DS_Store
+Thumbs.db
+
+# テスト関連
+.pytest_cache/
+.coverage
