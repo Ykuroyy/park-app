@@ -1,5 +1,4 @@
 import React, { useRef, useState, useCallback } from 'react';
-import Tesseract from 'tesseract.js';
 import './CameraCapture.css';
 
 interface PlateInfo {
@@ -24,6 +23,13 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
   const [showSuccess, setShowSuccess] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
+  const [showManualInput, setShowManualInput] = useState(false);
+  const [manualPlate, setManualPlate] = useState({
+    region: '',
+    classification: '',
+    hiragana: '',
+    number: ''
+  });
 
   React.useEffect(() => {
     startCamera();
@@ -124,40 +130,55 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
     console.log('撮影完了');
 
     try {
-      // 英語モード優先で確実な認識を目指す
-      setDebugInfo('OCR開始... 英語モードで数字・英字認識');
+      // Python PaddleOCR APIで高精度認識
+      setDebugInfo('OCR開始... PaddleOCRで日本語認識中');
       
-      // まず英語モードで数字部分を確実に認識
-      const result = await Tesseract.recognize(canvas, 'eng', {
-        logger: (m) => {
-          if (m.status === 'recognizing text') {
-            const progress = Math.round(m.progress * 100);
-            setDebugInfo(`英語認識中: ${progress}%`);
-          }
+      // 画像をBase64に変換
+      const imageDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      
+      setDebugInfo('画像をサーバーに送信中...');
+      
+      // Python OCR APIを呼び出し
+      const response = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        // 数字認識に特化した設定
-        psm: 8, // 単一の単語として扱う（数字に最適）
-        tessedit_char_whitelist: '0123456789-',
-        tessedit_char_blacklist: '',
-        // 数字認識の精度を上げる設定
-        tessedit_zero_rejection: '1',
-        classify_enable_learning: '0',
-        classify_enable_adaptive_matcher: '0'
+        body: JSON.stringify({
+          image: imageDataUrl
+        })
       });
-
-      const detectedText = result.data.text.trim();
-      const confidence = Math.round(result.data.confidence);
-      setDebugInfo(`検出テキスト: "${detectedText}"\n信頼度: ${confidence}%\n\nℹ️ 英語モードで認識（数字・英字）`);
-
-      // 非常に寛容な設定（日本語認識のため）
-      if (!detectedText && confidence < 1) {
-        setError(`日本語認識に失敗しました。\n\n💡 コツ:\n・漢字とひらがながはっきり見えるように\n・プレートにさらに近づく\n・明るい場所で撮影\n\n検出テキスト: "${detectedText}"`);
+      
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'OCR処理エラー');
+      }
+      
+      const detectedText = result.detected_text || '';
+      const confidence = result.confidence || 0;
+      
+      setDebugInfo(`🎯 PaddleOCR結果:\n検出テキスト: "${detectedText}"\n信頼度: ${confidence}%\n\n✨ 高精度日本語認識`);
+      
+      // PaddleOCRの結果がある場合は直接使用
+      let plateInfo = null;
+      if (result.plate_info) {
+        plateInfo = result.plate_info;
+      } else if (detectedText) {
+        plateInfo = parseJapanesePlate(detectedText);
+      }
+      
+      console.log('パース結果:', plateInfo);
+      
+      if (!detectedText) {
+        setError(`テキストが検出されませんでした。\n\n💡 コツ:\n・プレートにもっと近づく\n・明るい場所で撮影\n・水平に撮影`);
         setIsProcessing(false);
         return;
       }
-
-      const plateInfo = parseJapanesePlate(detectedText);
-      console.log('パース結果:', plateInfo);
 
       if (plateInfo && (plateInfo.region || plateInfo.number || plateInfo.hiragana)) {
         setShowSuccess(true);
@@ -166,49 +187,12 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
           onClose();
         }, 1500);
       } else {
-        // 日本語認識がうまくいかない場合、英語モードで再試行
-        setDebugInfo(`1回目失敗: "${detectedText}"\n英語モードで再試行...`);
-        
-        try {
-          const engResult = await Tesseract.recognize(canvas, 'eng', {
-            logger: (m) => {
-              if (m.status === 'recognizing text') {
-                const progress = Math.round(m.progress * 100);
-                setDebugInfo(`英語認識中: ${progress}%`);
-              }
-            },
-            psm: 8,
-            tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-'
-          });
-          
-          const engText = engResult.data.text.trim();
-          const engConfidence = Math.round(engResult.data.confidence);
-          
-          const combinedInfo = `日本語: "${detectedText}" (${confidence}%)\n英語: "${engText}" (${engConfidence}%)\n\n🔍 組み合わせて解析中...`;
-          setDebugInfo(combinedInfo);
-          
-          // 組み合わせたテキストで再パース
-          const combinedText = `${detectedText} ${engText}`.trim();
-          const combinedPlateInfo = parseJapanesePlate(combinedText);
-          
-          if (combinedPlateInfo && (combinedPlateInfo.region || combinedPlateInfo.number || combinedPlateInfo.hiragana)) {
-            setShowSuccess(true);
-            setTimeout(() => {
-              onPlateDetected(combinedPlateInfo);
-              onClose();
-            }, 1500);
-            return;
-          }
-        } catch (engErr) {
-          console.error('英語認識エラー:', engErr);
-        }
-        
-        setError(`車番として認識できませんでした。\n\n📝 検出結果:\n日本語: "${detectedText}" (${confidence}%)\n\n💡 コツ:\n・漢字とひらがながはっきり見えるように\n・プレートを画面いっぱいに\n・手動入力もお試しください`);
+        setError(`車番として認識できませんでした。\n\n📝 検出結果:\n"${detectedText}" (信頼度: ${confidence}%)\n\n💡 コツ:\n・漢字とひらがながはっきり見えるように\n・プレートを画面いっぱいに\n・手動入力もお試しください`);
       }
     } catch (err) {
       console.error('OCRエラー:', err);
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(`画像の解析中にエラーが発生しました: ${errorMessage}\n\nTesseract.jsが正常に読み込まれているか確認してください。`);
+      setError(`画像の解析中にエラーが発生しました: ${errorMessage}\n\nPython OCR APIに接続できない可能性があります。`);
     } finally {
       setIsProcessing(false);
     }
@@ -351,6 +335,23 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
           {isProcessing ? '解析中...' : 
            capturedImage ? '🔄 再撮影' : '📷 スキャンする'}
         </button>
+        
+        <button
+          className="manual-input-button"
+          onClick={() => setShowManualInput(true)}
+          style={{
+            backgroundColor: '#28a745',
+            color: 'white',
+            border: 'none',
+            padding: '12px 20px',
+            borderRadius: '8px',
+            fontSize: '16px',
+            margin: '10px',
+            cursor: 'pointer'
+          }}
+        >
+          ✏️ 手動で入力
+        </button>
       </div>
 
       {error && (
@@ -394,13 +395,151 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onPlateDetected, onClose 
         </div>
       )}
 
+      {showManualInput && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            maxWidth: '400px',
+            width: '90%'
+          }}>
+            <h3 style={{ marginBottom: '20px', textAlign: 'center' }}>車番を手動入力</h3>
+            
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>地域名（例：品川）</label>
+              <input
+                type="text"
+                placeholder="品川"
+                value={manualPlate.region}
+                onChange={(e) => setManualPlate({...manualPlate, region: e.target.value})}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ccc',
+                  borderRadius: '6px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>分類番号（例：500）</label>
+              <input
+                type="text"
+                placeholder="500"
+                value={manualPlate.classification}
+                onChange={(e) => setManualPlate({...manualPlate, classification: e.target.value})}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ccc',
+                  borderRadius: '6px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>ひらがな（例：あ）</label>
+              <input
+                type="text"
+                placeholder="あ"
+                value={manualPlate.hiragana}
+                onChange={(e) => setManualPlate({...manualPlate, hiragana: e.target.value})}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ccc',
+                  borderRadius: '6px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>番号（例：12-34）</label>
+              <input
+                type="text"
+                placeholder="12-34"
+                value={manualPlate.number}
+                onChange={(e) => setManualPlate({...manualPlate, number: e.target.value})}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ccc',
+                  borderRadius: '6px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+            
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => {
+                  if (manualPlate.region || manualPlate.number) {
+                    const plateInfo: PlateInfo = {
+                      region: manualPlate.region,
+                      classification: manualPlate.classification,
+                      hiragana: manualPlate.hiragana,
+                      number: manualPlate.number,
+                      fullText: `${manualPlate.region} ${manualPlate.classification} ${manualPlate.hiragana} ${manualPlate.number}`.trim()
+                    };
+                    onPlateDetected(plateInfo);
+                    onClose();
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  backgroundColor: '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  fontSize: '16px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✅ 登録
+              </button>
+              <button
+                onClick={() => setShowManualInput(false)}
+                style={{
+                  flex: 1,
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  fontSize: '16px',
+                  cursor: 'pointer'
+                }}
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="instructions">
         <p>📋 使い方:</p>
         <ul>
+          <li>📷 カメラでスキャン または ✏️ 手動で入力</li>
           <li>ナンバープレートを枠内に収める</li>
           <li>明るい場所で撮影する</li>
-          <li>プレートが水平になるようにする</li>
-          <li>文字がはっきり見えることを確認</li>
+          <li>OCRがうまくいかない場合は手動入力をご利用ください</li>
         </ul>
       </div>
     </div>

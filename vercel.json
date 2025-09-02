@@ -1,7 +1,12 @@
 {
-  "buildCommand": "echo 'Skipping build'",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "framework": null,
+  "framework": "vite",
+  "functions": {
+    "api/ocr.py": {
+      "runtime": "python3.9"
+    }
+  },
   "rewrites": [
     {
       "source": "/(.*)",
