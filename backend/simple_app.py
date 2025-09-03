@@ -69,10 +69,17 @@ def license_plate_ocr():
         # NumPy配列に変換
         img_array = np.array(image)
         
+        # 画像の前処理（コントラスト強化）
+        if TESSERACT_AVAILABLE:
+            # 二値化処理
+            _, img_array = cv2.threshold(img_array, 127, 255, cv2.THRESH_BINARY)
+            # ノイズ除去
+            img_array = cv2.medianBlur(img_array, 3)
+        
         # Tesseract OCRで認識（日本語対応）
         try:
-            # 日本語と英数字を認識
-            custom_config = r'--oem 3 --psm 6 -l jpn+eng'
+            # 車番プレート用の設定（1行のテキストとして認識）
+            custom_config = r'--oem 3 --psm 8 -l jpn -c tessedit_char_whitelist=0123456789あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん品川練馬横浜名古屋大阪京都神戸福岡札幌仙台広島-'
             detected_text = pytesseract.image_to_string(img_array, config=custom_config)
             detected_text = detected_text.strip()
             print(f"📝 認識テキスト: '{detected_text}'")
