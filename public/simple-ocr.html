@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <title>🚗 シンプル車番認識</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1 {
+            background: #4CAF50;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .camera-section {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 20px;
+            font-size: 18px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #ccc;
+        }
+        #preview {
+            max-width: 100%;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        #result {
+            background: #e3f2fd;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            white-space: pre-wrap;
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚗 シンプル車番認識（動作確認版）</h1>
+        
+        <div class="camera-section">
+            <h2>📸 写真を選択してください</h2>
+            <input type="file" id="imageInput" accept="image/*" capture="environment">
+            <img id="preview" style="display:none;">
+            <button id="ocrButton" onclick="performOCR()" disabled>
+                🔍 車番を認識する
+            </button>
+        </div>
+        
+        <div id="result" style="display:none;"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://respectful-charisma-production.up.railway.app';
+        let selectedImage = null;
+        
+        document.getElementById('imageInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    selectedImage = e.target.result;
+                    document.getElementById('preview').src = selectedImage;
+                    document.getElementById('preview').style.display = 'block';
+                    document.getElementById('ocrButton').disabled = false;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        
+        async function performOCR() {
+            if (!selectedImage) {
+                alert('画像を選択してください');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('result');
+            const button = document.getElementById('ocrButton');
+            
+            resultDiv.style.display = 'block';
+            resultDiv.className = '';
+            resultDiv.textContent = '🔄 処理中...（最大30秒かかります）';
+            button.disabled = true;
+            
+            try {
+                const response = await fetch(API_BASE + '/api/ocr', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        image: selectedImage
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'success';
+                    let result = '✅ 認識成功！\n\n';
+                    if (data.plate_info) {
+                        result += '地域: ' + (data.plate_info.region || '不明') + '\n';
+                        result += '分類: ' + (data.plate_info.classification || '不明') + '\n';
+                        result += 'ひらがな: ' + (data.plate_info.hiragana || '不明') + '\n';
+                        result += '番号: ' + (data.plate_info.number || '不明') + '\n';
+                    }
+                    result += '\n検出テキスト: ' + data.detected_text;
+                    resultDiv.textContent = result;
+                } else {
+                    resultDiv.className = 'error';
+                    resultDiv.textContent = '❌ エラー: ' + (data.error || '認識に失敗しました');
+                }
+            } catch (error) {
+                resultDiv.className = 'error';
+                resultDiv.textContent = '❌ 通信エラー: ' + error.message;
+            } finally {
+                button.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
