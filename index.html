@@ -4,9 +4,33 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>駐車場管理アプリ</title>
+    <title>🚗 車番認識アプリ - Railway版 [2025-09-02 18:31]</title>
+    <style>
+      body { 
+        font-family: system-ui, -apple-system, sans-serif; 
+        margin: 0; 
+        padding: 0; 
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+        min-height: 100vh;
+      }
+      .cache-indicator {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background: #ff4444;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        z-index: 9999;
+        font-weight: bold;
+      }
+    </style>
   </head>
   <body>
+    <div class="cache-indicator">
+      ✅ 最新版 18:31
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
